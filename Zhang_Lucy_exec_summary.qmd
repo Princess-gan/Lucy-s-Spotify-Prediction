@@ -1,0 +1,40 @@
+---
+title: "Song Popularity Prediction Executive Summary"
+subtitle: "Data Science 2 with R (STAT 301-2)"
+author: "Lucy Zhang"
+date: "Mar 16, 2023"
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: show
+    link-external-newwindow: true
+
+execute:
+  warning: false
+  echo: false
+  
+from: markdown+emoji  
+---
+# Introduction
+This final project built regression prediction models which aim to predict the song popularity for song producers and singers.
+
+The prediction focuses on multiple acoustic and musical features as variables in interest, such as genres, tempo, mode, loudness. There are also non-musical features such as counts. There are linear and non-linear models: null model, random forest, boosted trees, KNN, and elastic net. 
+
+After EDA, repetitive variables and artists information (irrelevant under this prompt) are filtered out. The normal distribution of the target variable shows no necessity for transformation. Based on above discoveries, a strong and final recipe is attempted, keeping the most relevant variables for accurate predictions. Preprocessing includes resampling with stratification, creating dummy variables for categorical data, standardizing numeric predictors, and removing predictors with no variation. 
+
+# Highlights
+By comparing the **rmse** values for 5 models after tuning their parameters, it shows that all non-linear models perform better than null model. 
+
+```{r}
+library(readr)
+read_csv("winning model/model_metrics.csv")
+```
+
+Among them, *random forest model* has the best predictive performance with mtry of 2, showing that a smaller number of variables sampled at each split performed better for song popularity dataset. Another parameter value min_n of 2 suggests that smaller leaf nodes may contribute to better performance. The mean rmse of 10.9. The performance on testing dataset aligns with the previous finding. Surprisingly, the boosted trees model did not outperform the random forest model here, as it is being known for its strong performance in predictive modeling. 
+
+However, besides rmse metric, the R-squared value of 0.369 suggests that the model can still be improved: next step is to try out different resampling methods, try out more machine learning models, and collect more data on songs since there are NA values on genres.
+
+# Conclusion
+In conclusion, random forest model with mtry of 2, min_n of 2 performs best prediction accuracy. The final model uses predictors `danceability`, `duration`, `liveness`, `loudness `, `instrumentalness`, `tempo`, `mode`, `count`, and there is stratification on target variable `popularity` while splitting training and testing dataset and when performing resampling. Future steps to improve the performance would be collecting additional song data, using more machine learning models, and trying out different resampling methods

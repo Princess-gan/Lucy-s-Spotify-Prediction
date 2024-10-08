@@ -1,0 +1,245 @@
+---
+title: "Song Popularity Prediction Report"
+subtitle: "Data Science 2 with R (STAT 301-2)"
+author: "Lucy Zhang"
+date: "Mar 14, 2023"
+
+format:
+  html:
+    toc: true
+    embed-resources: true
+    code-fold: show
+    link-external-newwindow: true
+
+execute:
+  warning: false
+  echo: false
+  
+from: markdown+emoji  
+---
+
+# Introduction
+The goal of this project is to create a predictive model that can accurately forecast song popularity with a score. The objective is to provide music producers and artists with insights on how to create popular songs. The dataset used for this project is from Kaggle, including song features such as genre, acousticness, duration, energy. The dataset contains songs released in recent years, and the aim is to analyze the data to identify patterns and relationships between song features and popularity to develop an accurate predictive model.
+
+# Data Overview
+## List of Variables:
+There are 28680 rows in total. 
+There are 16 variables in total: 
+`Genre`: The type of music described in several words. 
+
+`Artist`: The person or group who produces or performs the music.
+
+`Acousticness`: The degree of how acoustic or non-electronic the song is.
+
+`Danceability`: The degree of how suitable the song is for dancing based on rhythm, tempo, and beat strength.
+
+`Duration (time)`: The length of the song in milliseconds.
+
+`Energy`: The perceived intensity and activity level of the song based on its loudness, dynamic range, and timbre.
+
+`Instrumentalness`: The degree of how much the song contains no vocals and is only instrumental.
+
+`Liveness`: The degree of how much the song was recorded in front of a live audience as opposed to in a studio.
+
+`Loudness`: The perceived loudness of the song based on its volume and amplitude.
+
+`Speechiness`: The degree of how much the song contains spoken words as opposed to singing.
+
+`Tempo`: The speed or pace of the song measured in beats per minute (BPM).
+
+`Valence`: The degree of how positive or negative the emotional content of the song is.
+
+`Key`: The primary musical key of the song.
+
+`Mode`: The modality of the song, either major or minor. Major has brighter, more positive mode, while Minor is a darker mode.
+
+`Count`: The number of times the song has been played on the streaming platform.
+
+`Popularity`: A metric that indicates the popularity of the song on the streaming platform, based on the number of plays, likes, and shares.
+
+The reponse variable would be **Popularity**, which is a number within the range of 0-100. 
+
+## Data Cleaning
+### Missingness and mutate
+After using `skim` function, there is no missingness except in the genre column. 
+
+The data in the columnn `genre` are written in a format: `['comedy rock', 'comic', 'parody']`There are many NA values in the form of `[]`. I delete the brackets in excel, skip the NA values, use string split and mutate a new column called `genre_words` to contain a separate row for each word in the original "genre" column. 
+
+In addition, as the time duration is `duration_ms` calculated in ms, I mutate to divide them by 1000 and record them in second unit. 
+
+### Class Imbalance
+I visualized the distribution of `genre_words` by using `geom_bar` and the graph is unclear since there are too many genres on x-axis. However, it is clear to see multiple peaks, so there is class imbalance, but I need to use stratified sampling for popularity. Thus, I will provide the genre information or recommendation in EDA and result, but not in model building.
+
+### Response Variable Transformation
+The initial distribution shows that there are many 0 values in song popularity. 
+
+![](popularity1.png)
+However, the low popularity values, especially 0, are not useful for prediction because the extremely unpopular songs do not have much reference value in terms of my objective. Thus, I filtered out the value less than 10 and have an approximate normal distribution in target variable. 
+
+![](popularity2.png)
+
+## Exploring Relationships 
+### Genre frequency
+In this section, I use a cleaned dataset especially made for EDA. 
+
+Since the objective is to provide music producers and artists with recommendations on how to create popular songs. Thus, the `artist` column might not be useful because they are all individual artists. 
+
+I filtered the top 10 frequently appeared genre words in a descending order, becasue there are too many genres in total. 
+![](count.png)
+
+I also would like to find out if other variables are related to the genres. So for an example, I create a boxplot of danceability by top genres, and it shows that hip hop and rap songs have higher danceability, while rock genres have lower danceability. 
+
+![](genre_danceability.png)
+Since `genre_words` is the only categorical data, all the others are numeric or dummy variable(mode). I am exploring the correlation between each variables to filter out the variables in interest while building recipe later. 
+
+Based on the definitions, I will not include `valence` because it's similar to `mode`, both variables show the mood of the songs, neither `speechness` because it is very likely to be determined by genre. 
+
+Then, I plot a correlation matrix to show the correlation between each potential variables in interest (excepting target variable).
+
+![](corrplot1.png)
+From the plot above, we can see that `loudness`, `acousticness` and `energy` have very high correlation, so using only one of them in the predictive model could be sufficient. From the producer's perspective, `loudness` might be the most useful and straightforward information. So I am only keeping this. 
+
+Also, I plot a geom_box plot to assess the correlation between each variable with the target `popularity` variable. 
+
+![](correlation2.png)
+The result of `valence` and `mode` further proves that these two variables provide the same information, the `key` does not show significant correlation, so I am taking this variable out as well. 
+
+# Methods
+## Creating recipes
+To preprocess the data before fitting the models, I create a recipe to predict the target variable with all other variables after cleaning by EDA, which are: danceability, duration, liveness, loudness, instrumentalness, tempo, mode and count. 
+
+Moreover, I use `step_dummy()` to create dummy variables for all nominal predictors in the data set, which convert categorical data into a set of binary variables that can be used as input to a model.
+
+Subsequently, I use `step_normalize()` to standardizes all numeric predictors in the data set to have a mean of 0 and a standard deviation of 1. For example, K-nearest neighbors is sensitive to differences in scale among predictors. Standardization helps to ensure that all predictors are on a similar scale.
+
+Finally, I use `step_zv()` in the recipe to remove predictors that have zero variance, meaning that they have the same value for all observations in the data set. Removing them simplifies the model and can improve its accuracy by reducing noise in the data.
+
+## Resampling 
+The resampling method used is **v-fold cross-validation** with 10 folds and 5 repeats, stratified by the popularity of the songs. It randomly splits the data into "v" folds and repeatedly resampled for multiple times. During each repeat, the data is shuffled and partitioned into "v" equally sized subsets (folds). Each fold is used once as the test set while the remaining folds are combined to form the training set. The stratification ensures that the outcome variable's distribution is approximately the same in each fold.
+
+## Model types
+I will be fitting four different model types: Random Forest, Boosted Trees, K-Nearest Neighbors, and Elastic Net. For each model type, I will tune specific parameters to optimize performance. The tuning parameters are listed below:
+
+### Random Forest - ranger engine
+1. `mtry` parameter, which controls the number of variables randomly sampled as candidates at each split.
+2.  `min_n` parameter, which controls the minimum number of samples required to split an internal node.
+
+### Boosted Trees - xgboost engine
+1.  `trees` parameter, which controls the number of trees to fit in the model.
+2.`learn_rate` parameter, which controls the step size at each iteration.
+
+### K-Nearest Neighbors - kknn engine
+1. `k` parameter, which controls the number of nearest neighbors to include in the prediction.
+
+### Elastic Net - glmnet engine
+1. `penalty` parameter, which controls the relative weight of the L1 and L2 regularization terms.
+2. `mixing_ratio` parameter, which controls the relative weight of the L1 and L2 penalties.
+
+## Metric
+The metric I choose for model comparison will be the **Root Mean Squared Error (RMSE)**, which measures the average magnitude of the errors made by the model in predicting the outcome variable. I will use this metric to select the final model from each tuning process.
+
+# Model Building & Selection
+## Tuning parameters 
+After performing hyperparameter tuning, the best parameters for each model type are visualized and listed in the table as follows:
+
+### Random forest: 
+![](rf_tune.png)
+```{r}
+library(readr)
+rf <- read_csv("best parameters/rf_best.csv")
+rf
+```
+
+### Boosted trees: 
+![](bt_tune.png)
+```{r}
+bt <-read_csv("best parameters/bt_best.csv")
+bt
+```
+
+### K-nearest neighbors:
+![](knn_tune.png)
+```{r}
+knn <-read_csv("best parameters/knn_best.csv")
+knn
+```
+
+### Elastic net: 
+![](en_tune.png)
+```{r}
+en <- read_csv("best parameters/en_best.csv")
+en
+```
+### Best models for each:
+The following table summarizes the performance of the best models for each type:
+```{r}
+library(tidymodels)
+mean_rf <- rf %>% select(mean)
+mean_bt <- bt %>% select(mean)
+mean_knn <- knn %>% select(mean)
+mean_en <- en %>% select(mean)
+
+models <- 
+  bind_rows(mean_rf, mean_bt, mean_knn, mean_en, .id = "model_type") %>% 
+  mutate(model_type = case_when(
+    row_number() == 1 ~ "random forest",
+    row_number() == 2 ~ "boosted tree",
+    row_number() == 3 ~ "knn",
+    row_number() == 4 ~ "elastic net",
+    TRUE ~ model_type
+  )) %>% 
+  rename(rmse = mean)
+
+models
+```
+
+
+```{r}
+write_csv(models, "winning model/model_metrics.csv")
+```
+The mean rmse value does not differ a lot after choosing the winning tuning parameters values. 
+
+## Winning model
+The **random forest model** performed the best, with the lowest mean RMSE of 10.91. The tuned parameters for the random forest model were mtry = 2, min_n = 2, out of 50 tries.
+
+**Surprisingly**, the boosted trees model did not outperform the random forest model, as it is being known for its strong performance in predictive modeling.
+
+### Analysis on the tuning parameters
+The tuning process concludes that the optimal value of mtry is 2, showing that a smaller number of variables sampled at each split performed better for song popularity dataset. The optimal value of min_n (minimum number of samples in a terminal node) was also 2, suggesting that smaller leaf nodes may contribute to better performance.
+
+Further tuning could be explored by adjusting the range of the hyperparameters or adding new parameters. Additionally, different resampling methods could be used to evaluate model performance. 
+
+# Final Model Analysis
+
+## Performance metrics
+```{r}
+read_csv("winning model/rf_test_metrics.csv")
+```
+The performance mertrics with 'rmse' basically align with the performance with training data and resamples. 'rsq' value indicates 36.9% of the total variation in the outcome variable, it is not a high value to show that the model fits well, yet not necessarily bad. 'mae' means that the mean absolute error between the predicted and actual values of the outcome variable in the testing dataset is 8.49. Since the range of the response variable is 0-100, which is not small, the performance is adequately fine. 
+
+### Exploration of predictions vs the true values (graph)
+I did not perform a transformation on the target variable, rather than cutting the unnecessary presence of the outliers (popularity of 0-10). 
+
+![](pred vs obs.png)
+
+The above is the exploration of predictions vs the true values, showing the consistency in the prediction.
+
+## Compare with baseline/null model
+```{r}
+null_rmse <- read_csv("best parameters/null_test_metrics.csv")
+
+null_rmse
+```
+There are several potential areas for future improvement in the model, including further tuning hyperparameters, exploring different resampling methods, and trying out different feature engineering techniques. However, the random forest model has shown promise (mean rmse = 10.9) slightly better than the null model(rmse = 13.9), indicating that the effort put into building a predictive model is beneficial.
+
+I can possibly improve the performance next step by collecting additional song data. 
+
+# Conclusion
+In conclusion, I developed four tuning models and a null model to predict the popularity of songs on Spotify using a recipe that includes 10 objective features such as acousticness, danceability, energy, instrumentalness. I found that the **Random Forest model** slightly outperformed other models with a mean RMSE of 10.91 on the testing data with tuned hyperparamters mtry=2 and min_n=2. However, the R-squared value of 0.369 suggests that the model can still be improved: For next step, I can try out different resampling methods, and collect more data on songs since there are NA values on genres. 
+
+Overall, the prediction highlights the relative success of predicting the popularity of songs with musical and listening features for producers!
+
+# References
+1. Song popularity dataset:
+Mavani, Vatsal . "Spotify Dataset - Song Data with Genres." Kaggle, <https://www.kaggle.com/datasets/vatsalmavani/spotify-dataset>.
+2. Random Forest. Parsnip. <https://parsnip.tidymodels.org/reference/rand_forest.html>.
